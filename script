@@ -1,0 +1,206 @@
+#!/bin/bash
+set -e
+
+TEMP=$(getopt -o c:p:bm:whr:Pn --long connect:,password:,board,move:,whoturn,helper,register:,PC,newgame -n 'RequestScript' -- "$@")
+eval set -- "$TEMP"
+
+HELP_TXT="Welcome to the best TicTacToe Game!
+The options are:
+-before registering-
+-h OR --help : Description of the game and the option.
+-r <USER_NAME> -p <USER_PASSWORD> OR --register <USER_NAME> --password <USER_PASSWORD> : Register to the players data base.
+
+-after registering-
+-c <USER_NAME> -p <USER_PASSWORD> OR --connect <USER_NAME> -p <USER_PASSWORD> : Connecting to the game (requierd in any request for the game).
+-b OR --board : Show the ame board
+-m <USER_CHOICE> OR --move <USER_CHOICE> : Request for a move in the game. The optins are A,B,C and 1,2,3 (for example: A1, B3, C2)
+-w OR --whoturn : Shows if the current turn is your turn.
+-P OR -PC : The player choose to play against the computer.
+-n OR -newgame : The player can start a new game, but he will have to register again to the game.
+
+Hope you will enjoy the game! Good luck!"
+
+flag_board=false
+flag_move=false
+flag_whoturn=false
+USER_NAME=""
+USER_PASSWORD=""
+MOVMENT=""
+IP="127.0.0.1:1234"
+
+
+while true ; do
+	case "$1" in
+		-c|--connect)
+			
+			
+			case "$2" in
+				"") echo "canno't login without a user name"; exit 1 ;;
+				
+			esac
+			
+			USER_NAME=$2 
+			
+			shift 2
+			
+			case "$1" in
+				-p|--password) 
+					USER_PASSWORD=$2 ;;
+				*) echo "No password was inserted!" ; exit 1 ;;
+			esac
+			
+			
+			STR=$(curl -s -d "$USER_NAME:$USER_PASSWORD:MOV:$MOVMENT" $IP)
+			answer=$(echo $STR|jq -r .Log_Succ)
+			if [[ "$answer" == "F" ]]; then
+				echo "User name of password is incorrect OR the user dosn't exist!"
+				exit 1
+			fi
+			
+			shift 2 ;;
+
+		-b|--board) 
+			flag_board=true
+			shift 1 ;;
+
+		-m|--move) 
+			flag_move=true ; MOVMENT=$2 ; shift 2 ;;
+
+		-w|--whoturn) flag_whoturn=true ; shift 1 ;;
+
+		-h|--helper) echo "$HELP_TXT" ; exit 0 ;;
+
+		-r|--register)
+
+			case "$2" in
+				"") echo "canno't login without a user name"; exit 1 ;;
+			esac
+
+			case "$4" in
+				"") echo "canno't login without a password"; exit 1 ;; 
+			esac
+
+			USER_NAME=$2
+			USER_PASSWORD=$4 	
+			TEMP=$(curl -s -d "$USER_NAME:$USER_PASSWORD:REG" $IP)
+			answer=$(echo $TEMP|jq -r .Log_Succ)
+
+		 
+
+			if [[ "$answer" == "T" ]]; then
+
+				echo "registering has succeeded"
+				exit 0
+
+			elif [[ "$answer" == "F" ]]; then
+
+				echo "registering has failed"
+				exit 1
+
+			fi ;;
+
+		-P|--PC)
+			if [[ "$USER_NAME" == "" ]]; then
+				echo "cannot start a new game against PC without Connection"
+				exit 1
+			elif [[ "$USER_PASSWORD" == "" ]]; then
+				echo "cannot start a new game against PC without Connection"
+				exit 1
+			fi
+
+
+			TEMP=$(curl -s -d "$USER_NAME:$USER_PASSWORD:PC" $IP)
+			answer=$(echo $TEMP|jq -r .MOV)
+			if [[ "$answer" == "F" ]]; then
+				echo "cannot start a new game with the PC, new game is requierd (-n OR --newgame)"
+				exit 1
+			fi
+
+			echo "A new game was set between you and the PC"
+			exit 0 ;;
+
+		-n|--newgame)
+			if [[ "$USER_NAME" == "" ]]; then
+				echo "cannot start a new game against PC without Connection"
+				exit 1
+			elif [[ "$USER_PASSWORD" == "" ]]; then
+				echo "cannot start a new game against PC without Connection"
+				exit 1
+			fi
+
+			TEMP=$(curl -s -d "$USER_NAME:$USER_PASSWORD:CLR" $IP)
+			echo "Game was cleared
+Please register again for a new game."
+
+			exit 0 ;;
+
+		--) shift ; break ;;
+		*) echo "Internal error!" ; exit 1 ;;
+	esac
+done
+
+
+if $flag_move; then
+	TEMP=$(curl -s -d "$USER_NAME:$USER_PASSWORD:MOV:$MOVMENT" $IP)
+	answer=$(echo $TEMP|jq -r .Log_Succ)
+	if [[ "$answer" == "F" ]]; then
+		echo "User name of password is incorrect!"
+		exit 1
+	fi
+	
+	answer=$(echo $TEMP|jq -r .MOV)
+	if [[ "$answer" == "F" ]]; then
+		echo "Movment failed!"
+	elif [[ "$answer" == "T" ]]; then
+		echo "Movment has succeeded!"
+	fi
+
+	answer=$(echo $TEMP|jq -r .WIN)
+	if [[ "$answer" != "-" ]]; then
+		if [[ "$answer" == "$USER_NAME" ]]; then
+			echo "You are the winner! :)"
+		else 
+			echo "You lost the game! Better luck next time :("
+		fi
+	fi
+fi
+
+if $flag_board; then
+	
+	TEMP=$(curl -sd "$USER_NAME:$USER_PASSWORD:BRD" $IP)
+	answer=$(echo $TEMP|jq -r .Log_Succ)
+	if [[ "$answer" == "F" ]]; then
+		echo "User name of password is incorrect!"
+		exit 1
+	fi
+	
+	end=3	
+	count=-1
+	
+	for _ in $(seq 1 $end); do
+		count=$((count+1))
+		answer1=$(echo $TEMP|jq -r .BRD[$count])
+		count=$((count+1))
+		answer2=$(echo $TEMP|jq -r .BRD[$count])
+		count=$((count+1))
+		answer3=$(echo $TEMP|jq -r .BRD[$count])
+		echo -e "$answer1 | $answer2 | $answer3\n"
+	done
+		
+fi
+
+if $flag_whoturn; then
+	TEMP=$(curl -sd "$USER_NAME:$USER_PASSWORD:TRN" $IP)
+	answer=$(echo $TEMP|jq -r .Log_Succ)
+	if [[ "$answer" == "F" ]]; then
+		echo "User name of password is incorrect!"
+		exit 1
+	fi
+
+	answer=$(echo $TEMP|jq -r .TRN)
+	if [[ "$USER_NAME" == "$answer" ]]; then
+		echo "This is your turn!"
+	else
+		echo "This is not your turn!"
+	fi
+fi
